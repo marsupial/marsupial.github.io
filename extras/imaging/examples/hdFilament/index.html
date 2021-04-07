@@ -98,7 +98,10 @@ class App {
         const mesh = engine.loadFilamesh(filamesh_url, matinstance);
         this.suzanne = mesh.renderable;
         this.scene.addEntity(mesh.renderable);
-		this.loadUSD(engine);
+
+        this.usdLoader = new Filament.UsdIoLoader(engine, this.scene);
+        this.usdScene = this.loadUSD(this.usdLoader);
+        this.startTime = Date.now();
 
         this.swapChain = engine.createSwapChain();
         this.renderer = engine.createRenderer();
@@ -113,13 +116,16 @@ class App {
         window.requestAnimationFrame(this.render);
     }
 
-    loadUSD(engine) {
+    loadUSD(usdLoader) {
 		const usdFile = "scene.usda";
 		var usdStr = "";
 		if (false) {
 			usdStr = `#usda 1.0
 (
     upAxis = "Y"
+    endTimeCode = 240
+    metersPerUnit = 1
+    startTimeCode = 1
 )
 
 def Xform "grid_object1" (
@@ -128,16 +134,20 @@ def Xform "grid_object1" (
 {
     def Mesh "mesh_0"
     {
-	    matrix4d xformOp:transform:worldScale = ( (20, 0, 0, 0), (0, 20, 0, 0), (0, 0, 20, 0), (0, -1, 0, 1) )
-	    uniform token[] xformOpOrder = ["xformOp:transform:worldScale"]
+        matrix4d xformOp:transform:worldScale = ( (10, 0, 0, 0), (0, 10, 0, 0), (0, 0, 10, 0), (0, -1, 0, 1) )
+        float3 xformOp:rotateXYZ.timeSamples = {
+            1: (0, 0, 0),
+            241: (0, 360, 0)
+        }
+        uniform token[] xformOpOrder = ["xformOp:transform:worldScale", "xformOp:rotateXYZ"]
 
         uniform token orientation = "leftHanded"
         uniform token subdivisionScheme = "none"
 
         float3[] extent = [(-0.5, 0, -0.5), (0.5, 0, 0.5)]
-		color3f[] primvars:displayColor = [(1,0,0), (0,0,1), (1,0,0), (0,0,1)] (
-			interpolation = "vertex"
-		)
+        color3f[] primvars:displayColor = [(0,0,1), (1,0,0), (0,0,1), (1,0,0)] (
+            interpolation = "vertex"
+        )
 
         int[] faceVertexCounts = [4]
         int[] faceVertexIndices = [0, 1, 3, 2]
@@ -150,25 +160,42 @@ def Xform "grid_object1" (
 
     def Cube "cube"
     {
-    	matrix4d xformOp:transform:worldScale = ( (5, 0, 0, 0), (0, 5, 0, 0), (0, 0, 5, 0), (5, -1, -10, 1) )
-		uniform token[] xformOpOrder = ["xformOp:transform:worldScale"]
-		color3f[] primvars:displayColor = [(1, 0, 0)]
+        matrix4d xformOp:transform:worldScale = ( (5, 0, 0, 0), (0, 5, 0, 0), (0, 0, 5, 0), (5, -1, -10, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform:worldScale"]
+        color3f[] primvars:displayColor = [(0, 1, 1)]
     }
 
     def Sphere "sphere"
     {
-    	matrix4d xformOp:transform:worldScale = ( (5, 0, 0, 0), (0, 5, 0, 0), (0, 0, 5, 0), (-5, -1, -10, 1) )
-		uniform token[] xformOpOrder = ["xformOp:transform:worldScale"]
-		color3f[] primvars:displayColor = [(0, 0, 1)]
+        matrix4d xformOp:transform:worldScale = ( (5, 0, 0, 0), (0, 5, 0, 0), (0, 0, 5, 0), (-5, -1, -10, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform:worldScale"]
+        color3f[] primvars:displayColor = [(1, 1, 0)]
+    }
+
+    over "monkey" (
+        references = @./monkey.usdz@
+    )
+    {
+        double3 xformOp:translate = (-2, 0, 0)
+        float3 xformOp:rotateXYZ.timeSamples = {
+            1: (0, 0, 0),
+            241: (0, 0, -360)
+        }
+        uniform token[] xformOpOrder = ["xformOp:rotateXYZ", "xformOp:translate"]
     }
 }
 `;
 		}
-		this.scene._loadUSD(engine, usdFile, usdStr);
+		return usdLoader.load(usdFile, usdStr);
     }
 	
     render() {
-        const radians = Date.now() / 1000;
+        const now = Date.now();
+        var timeDiff = now - this.startTime; //in ms
+        this.usdScene.setTime(Math.floor(timeDiff/24) % 240);
+        this.usdLoader.sync(this.usdScene);
+
+        const radians = now / 1000;
         const transform = mat4.fromRotation(mat4.create(), radians, [0, 1, 0]);
         const tcm = this.engine.getTransformManager();
         const inst = tcm.getInstance(this.suzanne);
